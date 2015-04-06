@@ -10,30 +10,56 @@ namespace EvernoteReadOnlyTags
 {
     class Program
     {
-        public const string READONLY_CONTENT_CLASS = @"jasonsherron.readonly";
-        public const string READONLY_TAG = @"ReadOnly";
+        public static readonly string READONLY_CONTENT_CLASS = System.Configuration.ConfigurationManager.AppSettings["contentClass"];
+        public static readonly string READONLY_TAG = System.Configuration.ConfigurationManager.AppSettings["readOnlyTag"];
+
+        #region Evernote Search queries
+        static readonly string READONLY_TAG_SEARCH = @"tag:" + READONLY_TAG;
+        static readonly string READONLY_NOTAG_CONTENT_CLASS_SEARCH = @"contentClass:" + READONLY_CONTENT_CLASS + " -tag:" + READONLY_TAG;
+        static readonly string READONLYTAG_NOCONTENTCLASS_SEARCH = @"tag:" + READONLY_TAG + " -contentClass:" + READONLY_CONTENT_CLASS;
+        #endregion
 
         static void Main(string[] args)
         {
-            EvernoteConnection.Create();
+            EvernoteReadOnlyTagsException.Assert(!string.IsNullOrEmpty(READONLY_CONTENT_CLASS), "No contentClass configured.");
+            EvernoteReadOnlyTagsException.Assert(!string.IsNullOrEmpty(READONLY_TAG), "No readonly tag configured.");
+
+            var options = new Options();
+            if (!CommandLine.Parser.Default.ParseArguments(args, options))
+            {
+                options.GetUsage();
+                return;
+            }
             
-            //SampleData.CreateSampleNote(true, READONLY_TAG);
+            EvernoteConnection.Create();
+
+            if (options.CreateSampleReadOnlyNote)
+            {
+                SampleData.CreateSampleNote(true, READONLY_TAG);
+            }
 
             // lock newly-tagged notes
             SetTaggedNotesToReadOnly();
 
-            // unset - let user remove tags to reset notes to r/w
-            InteractiveRemoveReadOnlyTags();
+            if (options.Interactive)
+            {
+                // unset - let user remove tags to reset notes to r/w
+                InteractiveRemoveReadOnlyTags();
+            }
 
             // sweep and reset to read-write
             ResetUntaggedNotesToReadWrite();
+
+            if (options.Interactive)
+            {
+                Console.WriteLine("Press Enter to close.");
+                Console.ReadLine();
+            }
         }
 
         private static void InteractiveRemoveReadOnlyTags()
         {
-            const string READONLY_TAG_SEARCH_QUERY = @"tag:" + READONLY_TAG;
-
-            List<ENSessionFindNotesResult> readOnlyNotes = FindNotes(READONLY_TAG_SEARCH_QUERY);
+            List<ENSessionFindNotesResult> readOnlyNotes = FindNotes(READONLY_TAG_SEARCH);
 
             Console.WriteLine("all readonly notes: " + readOnlyNotes.Count);
             Debug.WriteLine("all readonly notes: " + readOnlyNotes.Count);
@@ -54,6 +80,13 @@ namespace EvernoteReadOnlyTags
 
                     loadedNote.TagGuids.Remove(readOnlyTag.Guid);
                     noteStore.UpdateNote(loadedNote);
+                    Console.WriteLine("Removed readonly tag: " + readOnlyNote.Title);
+                    Debug.WriteLine("Removed readonly tag: " + readOnlyNote.Title);
+                }
+                else
+                {
+                    Console.WriteLine("Skipped: " + readOnlyNote.Title);
+                    Debug.WriteLine("Skipped: " + readOnlyNote.Title);
                 }
             }
         }
@@ -61,9 +94,7 @@ namespace EvernoteReadOnlyTags
         private static void SetTaggedNotesToReadOnly()
         {
             // find notes with readonly tag but no contentClass
-            const string READONLY_TAG_NO_CONTENTCLASS_SEARCH = @"tag:" + READONLY_TAG + " -contentClass:" + READONLY_CONTENT_CLASS;
-
-            List<ENSessionFindNotesResult> notesToSetReadOnly = FindNotes(READONLY_TAG_NO_CONTENTCLASS_SEARCH);
+            List<ENSessionFindNotesResult> notesToSetReadOnly = FindNotes(READONLYTAG_NOCONTENTCLASS_SEARCH);
 
             Console.WriteLine("newly-tagged notes to mark readonly: " + notesToSetReadOnly.Count);
             Debug.WriteLine("newly-tagged notes to mark readonly: " + notesToSetReadOnly.Count);
@@ -85,8 +116,6 @@ namespace EvernoteReadOnlyTags
         private static void ResetUntaggedNotesToReadWrite()
         {
             // find notes with the contentClass but no tag
-            const string READONLY_NOTAG_CONTENT_CLASS_SEARCH = @"contentClass:" + READONLY_CONTENT_CLASS + " -tag:" + READONLY_TAG;
-
             List<ENSessionFindNotesResult> untaggedNotes = FindNotes(READONLY_NOTAG_CONTENT_CLASS_SEARCH);
 
             Console.WriteLine("untagged notes to reset to r/w: " + untaggedNotes.Count);

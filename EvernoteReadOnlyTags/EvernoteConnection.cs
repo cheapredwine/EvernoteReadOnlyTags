@@ -16,21 +16,23 @@ namespace EvernoteReadOnlyTags
 
         public static void Create()
         {
-            const string DEV_TOKEN = @"S=s1:U=90a30:E=153e3c3aab4:C=14c8c127c60:P=1cd:A=en-devtoken:V=2:H=d8d13e0d201c83db041872b2f5a9f691";
+            string authToken = System.Configuration.ConfigurationManager.AppSettings["authToken"];
+            EvernoteReadOnlyTagsException.Assert(!string.IsNullOrEmpty(authToken), "No auth token configured.");
 
             string url = System.Configuration.ConfigurationManager.AppSettings["URL"];
+            EvernoteReadOnlyTagsException.Assert(!string.IsNullOrEmpty(url), "No URL configured.");
 
-            ENSessionAdvanced.SetSharedSessionDeveloperToken(DEV_TOKEN, url);
+            ENSessionAdvanced.SetSharedSessionDeveloperToken(authToken, url);
             if (ENSession.SharedSession.IsAuthenticated == false)
             {
                 ENSession.SharedSession.AuthenticateToEvernote();
             }
 
-            session = ENSession.SharedSession;
-
+            // BUG: this will always be true in the current Evernote SDK :(
             EvernoteReadOnlyTagsException.Assert(ENSession.SharedSession.IsAuthenticated, "Authentication failed");
-        }
-
+ 
+            session = ENSession.SharedSession;
+       }
 
         public static ENSession CurrentSession
         {
